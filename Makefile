@@ -7,14 +7,14 @@ TAGS_TEST ?= with_gvisor,with_quic,with_wireguard,with_grpc,with_ech,with_utls,w
 
 GOHOSTOS = $(shell go env GOHOSTOS)
 GOHOSTARCH = $(shell go env GOHOSTARCH)
-VERSION=$(shell CGO_ENABLED=0 GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) go run ./cmd/internal/read_tag)
+VERSION=$(shell cat ./docs/changelog.md | grep '### ' | head -1 | awk '{print $$2}')-g$(COMMIT)+dance-crate
 
 PARAMS = -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=$(VERSION)' -s -w -buildid="
 MAIN_PARAMS = $(PARAMS) -tags $(TAGS)
 MAIN = ./cmd/sing-box
 PREFIX ?= $(shell go env GOPATH)
 
-.PHONY: test release docs build
+.PHONY: test release docs build modver
 
 build:
 	go build $(MAIN_PARAMS) $(MAIN)
@@ -219,3 +219,11 @@ update:
 	git fetch
 	git reset FETCH_HEAD --hard
 	git clean -fdx
+
+COMMIT_INFO = $(shell git log -1 --format="%H %ct")
+MODVER_HASH = $(shell echo $(word 1, $(COMMIT_INFO)) | cut -c 1-12)
+MODVER_TIME = $(shell date -u -d @$(word 2,$(COMMIT_INFO)) +"%Y%m%d%H%M%S")
+MODVER = v0.0.0-$(MODVER_TIME)-$(MODVER_HASH)
+
+modver:
+	@echo $(MODVER)
