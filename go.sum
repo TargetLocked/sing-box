@@ -117,8 +117,6 @@ github.com/sagernet/reality v0.0.0-20230406110435-ee17307e7691/go.mod h1:B8lp4Wk
 github.com/sagernet/sing v0.2.18/go.mod h1:OL6k2F0vHmEzXz2KW19qQzu172FDgSbUSODylighuVo=
 github.com/sagernet/sing v0.5.0-rc.2 h1:tIrs6pRbjJWvI0ITRSg47P1wosY+iSuHpw9t5/hBx+Q=
 github.com/sagernet/sing v0.5.0-rc.2/go.mod h1:ARkL0gM13/Iv5VCZmci/NuoOlePoIsW0m7BWfln/Hak=
-github.com/sagernet/sing-dns v0.3.0-rc.2 h1:z1yROBxd/6wik5h53Sz5df1DSmbPTaOu/Z0wAmyXGoQ=
-github.com/sagernet/sing-dns v0.3.0-rc.2/go.mod h1:TqLIelI+FAbVEdiTRolhGLOwvhVjY7oT+wezlOJUQ7M=
 github.com/sagernet/sing-mux v0.2.0 h1:4C+vd8HztJCWNYfufvgL49xaOoOHXty2+EAjnzN3IYo=
 github.com/sagernet/sing-mux v0.2.0/go.mod h1:khzr9AOPocLa+g53dBplwNDz4gdsyx/YM3swtAhlkHQ=
 github.com/sagernet/sing-quic v0.3.0-rc.1 h1:SlzL1yfEAKJyRduub8vzOVtbyTLAX7RZEEBZxO5utts=
@@ -151,6 +149,8 @@ github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/targetlocked/sing-dns v0.0.0-20241022070534-a75f2038bb46 h1:7XKplrF7Lf42+Nwq0SYx5IRYH6DbLXLRR7Fk28paCvQ=
+github.com/targetlocked/sing-dns v0.0.0-20241022070534-a75f2038bb46/go.mod h1:TqLIelI+FAbVEdiTRolhGLOwvhVjY7oT+wezlOJUQ7M=
 github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 h1:tHNk7XK9GkmKUR6Gh8gVBKXc2MVSZ4G/NnWLtzw4gNA=
 github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923/go.mod h1:eLL9Nub3yfAho7qB0MzZizFhTU2QkLeoVsWdHtDW264=
 github.com/vishvananda/netns v0.0.4 h1:Oeaw1EM2JMxD51g9uhtC0D7erkIjgmj8+JZc26m1YX8=
