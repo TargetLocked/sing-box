@@ -4,7 +4,7 @@ TAGS ?= $(shell cat release/DEFAULT_BUILD_TAGS_OTHERS)
 
 GOHOSTOS = $(shell go env GOHOSTOS)
 GOHOSTARCH = $(shell go env GOHOSTARCH)
-VERSION=$(shell CGO_ENABLED=0 GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) go run github.com/sagernet/sing-box/cmd/internal/read_tag@latest)
+VERSION=$(shell cat ./docs/changelog.md | grep '\#\#\# ' | head -1 | awk '{print $$2}')-$(COMMIT)+dance-crate
 
 LDFLAGS_SHARED = $(shell cat release/LDFLAGS)
 PARAMS = -v -trimpath -ldflags "-X 'github.com/sagernet/sing-box/constant.Version=$(VERSION)' $(LDFLAGS_SHARED) -s -w -buildid="
@@ -14,7 +14,7 @@ PREFIX ?= $(shell go env GOPATH)
 SING_FFI ?= sing-ffi
 LIBBOX_FFI_CONFIG ?= ./experimental/libbox/ffi.json
 
-.PHONY: test release docs build
+.PHONY: test release docs build internaltag diff upgrade push modver server
 
 build:
 	export GOTOOLCHAIN=local && \
@@ -288,3 +288,37 @@ update:
 
 %:
 	@:
+
+internaltag:
+	@echo $(VERSION)
+
+diff:
+	git fetch upstream
+	git diff origin/stable..upstream/stable
+
+upgrade:
+	git fetch upstream
+	git branch -f stable upstream/stable
+	git rebase origin/stable dance-crate --onto upstream/stable
+
+push:
+	git push -f origin testing
+	git push -f origin stable
+	git push -f origin dance-crate
+
+COMMIT_INFO = $(shell git log -1 --format="%H %ct")
+MODVER_HASH = $(shell echo $(word 1, $(COMMIT_INFO)) | cut -c 1-12)
+MODVER_TIME = $(shell date -u -d @$(word 2,$(COMMIT_INFO)) +"%Y%m%d%H%M%S")
+MODVER = v0.0.0-$(MODVER_TIME)-$(MODVER_HASH)
+
+modver:
+	@echo $(MODVER)
+
+SERVER_PARAMS = $(PARAMS) -o "./build/sing-box-$$GOOS-$$GOARCH" -tags "$(TAGS),with_v2ray_api"
+
+server:
+	mkdir -p build/
+	export GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 && \
+	go build $(SERVER_PARAMS) $(MAIN)
+	export GOTOOLCHAIN=local GOOS=linux GOARCH=arm64 && \
+	go build $(SERVER_PARAMS) $(MAIN)
