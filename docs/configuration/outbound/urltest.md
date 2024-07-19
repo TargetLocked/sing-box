@@ -14,7 +14,8 @@
   "interval": "",
   "tolerance": 0,
   "idle_timeout": "",
-  "interrupt_exist_connections": false
+  "interrupt_exist_connections": false,
+  "max_successive_failures": 0
 }
 ```
 
@@ -47,3 +48,7 @@ The idle timeout. `30m` will be used if empty.
 Interrupt existing connections when the selected outbound has changed.
 
 Only inbound connections are affected by this setting, internal connections will always be interrupted.
+
+#### max_successive_failures
+
+Max successive dial failures before an extra test is enforced. Set to `0` to disable.
