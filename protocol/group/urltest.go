@@ -44,6 +44,8 @@ type URLTest struct {
 	idleTimeout                  time.Duration
 	group                        *URLTestGroup
 	interruptExternalConnections bool
+
+	maxSuccessiveFailures uint16
 }
 
 func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.URLTestOutboundOptions) (adapter.Outbound, error) {
@@ -60,6 +62,7 @@ func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLo
 		tolerance:                    options.Tolerance,
 		idleTimeout:                  time.Duration(options.IdleTimeout),
 		interruptExternalConnections: options.InterruptExistConnections,
+		maxSuccessiveFailures:        options.MaxSuccessiveFailures,
 	}
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
@@ -76,7 +79,18 @@ func (s *URLTest) Start() error {
 		}
 		outbounds = append(outbounds, detour)
 	}
-	group, err := NewURLTestGroup(s.ctx, s.outbound, s.logger, outbounds, s.link, s.interval, s.tolerance, s.idleTimeout, s.interruptExternalConnections)
+	group, err := NewURLTestGroup(
+		s.ctx,
+		s.outbound,
+		s.logger,
+		outbounds,
+		s.link,
+		s.interval,
+		s.tolerance,
+		s.idleTimeout,
+		s.interruptExternalConnections,
+		s.maxSuccessiveFailures,
+	)
 	if err != nil {
 		return err
 	}
@@ -135,10 +149,11 @@ func (s *URLTest) DialContext(ctx context.Context, network string, destination M
 	}
 	conn, err := outbound.DialContext(ctx, network, destination)
 	if err == nil {
+		s.group.onDialSuccess()
 		return s.group.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.DeleteURLTestHistory(outbound.Tag())
+	s.group.onDialFailure(outbound.Tag())
 	return nil, err
 }
 
@@ -153,10 +168,11 @@ func (s *URLTest) ListenPacket(ctx context.Context, destination M.Socksaddr) (ne
 	}
 	conn, err := outbound.ListenPacket(ctx, destination)
 	if err == nil {
+		s.group.onDialSuccess()
 		return s.group.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.DeleteURLTestHistory(outbound.Tag())
+	s.group.onDialFailure(outbound.Tag())
 	return nil, err
 }
 
@@ -193,9 +209,23 @@ type URLTestGroup struct {
 	close                        chan struct{}
 	started                      bool
 	lastActive                   common.TypedValue[time.Time]
+
+	failCount             atomic.Int32
+	maxSuccessiveFailures uint16
 }
 
-func NewURLTestGroup(ctx context.Context, outboundManager adapter.OutboundManager, logger log.Logger, outbounds []adapter.Outbound, link string, interval time.Duration, tolerance uint16, idleTimeout time.Duration, interruptExternalConnections bool) (*URLTestGroup, error) {
+func NewURLTestGroup(
+	ctx context.Context,
+	outboundManager adapter.OutboundManager,
+	logger log.Logger,
+	outbounds []adapter.Outbound,
+	link string,
+	interval time.Duration,
+	tolerance uint16,
+	idleTimeout time.Duration,
+	interruptExternalConnections bool,
+	maxSuccessiveFailures uint16,
+) (*URLTestGroup, error) {
 	if interval == 0 {
 		interval = C.DefaultURLTestInterval
 	}
@@ -230,6 +260,7 @@ func NewURLTestGroup(ctx context.Context, outboundManager adapter.OutboundManage
 		pause:                        service.FromContext[pause.Manager](ctx),
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: interruptExternalConnections,
+		maxSuccessiveFailures:        maxSuccessiveFailures,
 	}, nil
 }
 
@@ -409,5 +440,21 @@ func (g *URLTestGroup) performUpdateCheck() {
 	}
 	if updated {
 		g.interruptGroup.Interrupt(g.interruptExternalConnections)
+	}
+}
+
+func (g *URLTestGroup) onDialSuccess() {
+	if g.maxSuccessiveFailures > 0 {
+		g.failCount.Store(0)
+	}
+}
+
+func (g *URLTestGroup) onDialFailure(outboundTag string) {
+	if g.maxSuccessiveFailures > 0 && g.failCount.Add(1) > int32(g.maxSuccessiveFailures) {
+		go g.CheckOutbounds(true)
+		g.failCount.Store(0)
+		g.logger.Warn("enforced urltest because of multiple failures")
+	} else {
+		g.history.DeleteURLTestHistory(outboundTag)
 	}
 }
