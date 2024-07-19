@@ -160,3 +160,9 @@ type URLTestGroup interface {
 	URLTest(ctx context.Context) (map[string]uint16, error)
 	PerformUpdateCheck()
 }
+
+// URLTestDialObserver is notified of dial results of connections routed through the group.
+type URLTestDialObserver interface {
+	OnDialSuccess()
+	OnDialFailure()
+}

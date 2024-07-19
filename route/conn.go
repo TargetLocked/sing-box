@@ -122,11 +122,12 @@ func (m *ConnectionManager) NewConnection(ctx context.Context, this N.Dialer, co
 			dialerString = " using outbound/" + outbound.Type() + "[" + outbound.Tag() + "]"
 		}
 		err = E.Cause(err, "open connection to ", remoteString, dialerString)
-		m.deleteURLTestHistory(metadata.OutboundChain)
+		m.reportURLTestDialFailure(ctx, metadata.OutboundChain)
 		N.CloseOnHandshakeFailure(conn, onClose, err)
 		m.logger.ErrorContext(ctx, err)
 		return
 	}
+	m.reportURLTestDialSuccess(metadata.OutboundChain)
 	err = N.ReportConnHandshakeSuccess(conn, remoteConn)
 	if err != nil {
 		err = E.Cause(err, "report handshake success")
@@ -198,7 +199,7 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 				dialerString = " using outbound/" + outbound.Type() + "[" + outbound.Tag() + "]"
 			}
 			err = E.Cause(err, "open packet connection to ", remoteString, dialerString)
-			m.deleteURLTestHistory(metadata.OutboundChain)
+			m.reportURLTestDialFailure(ctx, metadata.OutboundChain)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
 			return
@@ -222,12 +223,13 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 				dialerString = " using outbound/" + outbound.Type() + "[" + outbound.Tag() + "]"
 			}
 			err = E.Cause(err, "listen packet connection using ", dialerString)
-			m.deleteURLTestHistory(metadata.OutboundChain)
+			m.reportURLTestDialFailure(ctx, metadata.OutboundChain)
 			N.CloseOnHandshakeFailure(conn, onClose, err)
 			m.logger.ErrorContext(ctx, err)
 			return
 		}
 	}
+	m.reportURLTestDialSuccess(metadata.OutboundChain)
 	err = N.ReportPacketConnHandshakeSuccess(conn, remotePacketConn)
 	if err != nil {
 		err = E.Cause(err, "report handshake success")
@@ -281,12 +283,28 @@ func (m *ConnectionManager) NewPacketConnection(ctx context.Context, this N.Dial
 	go m.packetConnectionCopy(ctx, destination, conn, true, &done, onClose)
 }
 
-func (m *ConnectionManager) deleteURLTestHistory(chain []adapter.Outbound) {
+func (m *ConnectionManager) reportURLTestDialFailure(ctx context.Context, chain []adapter.Outbound) {
 	if slices.ContainsFunc(chain, func(it adapter.Outbound) bool {
 		_, isURLTestGroup := it.(adapter.URLTestGroup)
 		return isURLTestGroup
 	}) {
 		m.urlTestHistory.DeleteURLTestHistory(chain[len(chain)-1].Tag())
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	for _, outbound := range chain {
+		if observer, isObserver := outbound.(adapter.URLTestDialObserver); isObserver {
+			observer.OnDialFailure()
+		}
+	}
+}
+
+func (m *ConnectionManager) reportURLTestDialSuccess(chain []adapter.Outbound) {
+	for _, outbound := range chain {
+		if observer, isObserver := outbound.(adapter.URLTestDialObserver); isObserver {
+			observer.OnDialSuccess()
+		}
 	}
 }
 
