@@ -1,0 +1,113 @@
+name: Build SFA
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SEGMENT_DOWNLOAD_TIMEOUT_MINS: "2"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          path: sing-box
+
+      - name: checkout app
+        uses: actions/checkout@v6
+        with:
+          path: sing-box-for-android
+          repository: SagerNet/sing-box-for-android
+          ref: "main"
+
+      - name: setup go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "~1.25"
+          cache-dependency-path: "**/go.sum"
+
+      - name: setup java
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: 17
+          cache: "gradle"
+          # sing-box-for-android/**/gradle-wrapper.properties
+          # sing-box-for-android/gradle/*.versions.toml
+          # sing-box-for-android/**/versions.properties
+          cache-dependency-path: |
+            sing-box-for-android/**/*.gradle*
+
+      - name: setup ndk
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28
+
+      - name: get build tools version
+        id: sdk-ver
+        run: echo version=$(ls $ANDROID_HOME/build-tools | tail -n 1) >> $GITHUB_OUTPUT
+
+      - name: build libbox
+        env:
+          # CGO_ENABLED: "0"
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          mkdir -p sing-box-for-android/app/libs/
+          cd sing-box
+          make lib_install
+          make lib_android
+
+      - name: update version
+        run: |
+          cd sing-box
+          make update_android_version
+
+      - name: build app
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          cd sing-box-for-android
+          echo "" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8 -XX:+UseParallelGC" >> gradle.properties
+          echo "org.gradle.caching=true" >> gradle.properties
+          echo "org.gradle.parallel=true" >> gradle.properties
+          sed -i 's|signingConfig = |//&|' app/build.gradle.kts
+          chmod +x ./gradlew
+          ./gradlew :app:assembleOtherRelease
+
+      - name: sign app
+        uses: r0adkll/sign-android-release@v1
+        id: sign-app
+        env:
+          BUILD_TOOLS_VERSION: ${{steps.sdk-ver.outputs.version}}
+        with:
+          alias: ${{ secrets.ALIAS }}
+          releaseDirectory: sing-box-for-android/app/build/outputs/apk/other/release
+          signingKeyBase64: ${{ secrets.SIGN_KEY }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+
+      - name: rename apks
+        env:
+          SUFFIX: "-unsigned-signed"
+        run: |
+          cd sing-box-for-android/app/build/outputs/apk/other/release
+          find . -maxdepth 1 -type f -name "*${SUFFIX}.apk" | sed "s/\(.*\)${SUFFIX}\.apk$/mv '&' '\1\.apk'/" | sh
+
+      - name: upload apk
+        uses: actions/upload-artifact@v6
+        env:
+          APK_ARCH: arm64-v8a
+        with:
+          name: SFA-${{ env.APK_ARCH }}
+          path: sing-box-for-android/app/build/outputs/apk/other/release/*-${{ env.APK_ARCH }}.apk
+
+      - name: upload apk
+        uses: actions/upload-artifact@v6
+        env:
+          APK_ARCH: universal
+        with:
+          name: SFA-${{ env.APK_ARCH }}
+          path: sing-box-for-android/app/build/outputs/apk/other/release/*-${{ env.APK_ARCH }}.apk
