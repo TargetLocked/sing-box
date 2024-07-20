@@ -7,11 +7,11 @@ import (
 )
 
 func ReadTag() (string, error) {
-	currentTag, err := shell.Exec("make", "internaltag").ReadOutput()
+	currentTag, err := shell.Exec("make", "-s", "internaltag").ReadOutput()
 	if err != nil {
 		return currentTag, err
 	}
-	return currentTag[1:], nil
+	return currentTag, nil
 }
 
 func ReadTagVersionRev() (badversion.Version, error) {
@@ -20,13 +20,10 @@ func ReadTagVersionRev() (badversion.Version, error) {
 }
 
 func ReadTagVersion() (badversion.Version, error) {
-	currentTag := common.Must1(shell.Exec("git", "describe", "--tags").ReadOutput())
-	currentTagRev := common.Must1(shell.Exec("git", "describe", "--tags", "--abbrev=0").ReadOutput())
-	version := badversion.Parse(currentTagRev[1:])
-	if currentTagRev != currentTag {
-		if version.PreReleaseIdentifier == "" {
-			version.Patch++
-		}
+	currentTag, err := ReadTag()
+	if err != nil {
+		return badversion.Version{}, err
 	}
+	version := badversion.Parse(currentTag)
 	return version, nil
 }
