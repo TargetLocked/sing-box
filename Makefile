@@ -11,7 +11,7 @@ MAIN_PARAMS = $(PARAMS) -tags "$(TAGS)"
 MAIN = ./cmd/sing-box
 PREFIX ?= $(shell go env GOPATH)
 
-.PHONY: test release docs build modver
+.PHONY: test release docs build modver internaltag
 
 build:
 	export GOTOOLCHAIN=local && \
