@@ -7,17 +7,11 @@ import (
 )
 
 func ReadTag() (string, error) {
-	currentTag, err := shell.Exec("git", "describe", "--tags").ReadOutput()
+	currentTag, err := shell.Exec("make", "internaltag").ReadOutput()
 	if err != nil {
 		return currentTag, err
 	}
-	currentTagRev, _ := shell.Exec("git", "describe", "--tags", "--abbrev=0").ReadOutput()
-	if currentTagRev == currentTag {
-		return currentTag[1:], nil
-	}
-	shortCommit, _ := shell.Exec("git", "rev-parse", "--short", "HEAD").ReadOutput()
-	version := badversion.Parse(currentTagRev[1:])
-	return version.String() + "-" + shortCommit, nil
+	return currentTag[1:], nil
 }
 
 func ReadTagVersionRev() (badversion.Version, error) {

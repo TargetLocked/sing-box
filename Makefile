@@ -271,6 +271,9 @@ update:
 	git reset FETCH_HEAD --hard
 	git clean -fdx
 
+internaltag:
+	@echo $(VERSION)
+
 COMMIT_INFO = $(shell git log -1 --format="%H %ct")
 MODVER_HASH = $(shell echo $(word 1, $(COMMIT_INFO)) | cut -c 1-12)
 MODVER_TIME = $(shell date -u -d @$(word 2,$(COMMIT_INFO)) +"%Y%m%d%H%M%S")
