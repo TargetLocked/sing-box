@@ -11,7 +11,7 @@ MAIN_PARAMS = $(PARAMS) -tags "$(TAGS)"
 MAIN = ./cmd/sing-box
 PREFIX ?= $(shell go env GOPATH)
 
-.PHONY: test release docs build modver internaltag
+.PHONY: test release docs build modver internaltag upgrade diff push upgrade-mod
 
 build:
 	export GOTOOLCHAIN=local && \
@@ -273,6 +273,23 @@ update:
 
 internaltag:
 	@echo $(VERSION)
+
+diff:
+	git fetch upstream
+	git diff origin/dev-next..upstream/dev-next
+
+upgrade:
+	git fetch upstream
+	git branch -f dev-next upstream/dev-next
+	git rebase origin/dev-next dance-crate --onto upstream/dev-next
+
+upgrade-mod:
+	sed -Ei 's=(targetlocked/sing-dns).*$$=\1 $(shell make -sC ../sing-dns modver)=i' ./go.mod
+	go mod tidy
+
+push:
+	git push -f origin dev-next
+	git push -f origin dance-crate
 
 COMMIT_INFO = $(shell git log -1 --format="%H %ct")
 MODVER_HASH = $(shell echo $(word 1, $(COMMIT_INFO)) | cut -c 1-12)
