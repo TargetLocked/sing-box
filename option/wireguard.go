@@ -17,6 +17,8 @@ type WireGuardOutboundOptions struct {
 	Workers       int         `json:"workers,omitempty"`
 	MTU           uint32      `json:"mtu,omitempty"`
 	Network       NetworkList `json:"network,omitempty"`
+
+	IdleTimeout Duration `json:"idle_timeout,omitempty"`
 }
 
 type WireGuardPeer struct {

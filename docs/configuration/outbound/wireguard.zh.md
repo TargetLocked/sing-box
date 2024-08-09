@@ -24,6 +24,7 @@
   "workers": 4,
   "mtu": 1408,
   "network": "tcp",
+  "idle_timeout": "",
 
   ... // 拨号字段
 }
@@ -117,6 +118,12 @@ WireGuard MTU。
 `tcp` 或 `udp`。
 
 默认所有。
+
+#### idle_timeout
+
+临时关闭此出站前的空闲超时。
+
+如果为空，不会因超时关闭此出站。
 
 ### 拨号字段
 

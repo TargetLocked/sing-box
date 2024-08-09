@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
@@ -17,9 +19,10 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/wireguard"
-	"github.com/sagernet/sing-dns"
-	"github.com/sagernet/sing-tun"
+	dns "github.com/sagernet/sing-dns"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/atomic"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -49,6 +52,13 @@ type WireGuard struct {
 	bind          conn.Bind
 	device        *device.Device
 	tunDevice     wireguard.Device
+
+	idleTimeout time.Duration
+	upDownMutex sync.Mutex
+	inactive    bool
+	lastActive  atomic.TypedValue[time.Time]
+	ticker      *time.Ticker
+	close       chan struct{}
 }
 
 func NewWireGuard(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.WireGuardOutboundOptions) (*WireGuard, error) {
@@ -64,6 +74,8 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		ctx:          ctx,
 		workers:      options.Workers,
 		pauseManager: service.FromContext[pause.Manager](ctx),
+		idleTimeout:  time.Duration(options.IdleTimeout),
+		close:        make(chan struct{}),
 	}
 	peers, err := wireguard.ParsePeers(options)
 	if err != nil {
@@ -174,10 +186,19 @@ func (w *WireGuard) start() error {
 	}
 	w.device = wgDevice
 	w.pauseCallback = w.pauseManager.RegisterCallback(w.onPauseUpdated)
+	if w.idleTimeout > 0 {
+		w.ticker = time.NewTicker(w.idleTimeout)
+		go w.loopCheck()
+	}
 	return nil
 }
 
 func (w *WireGuard) Close() error {
+	if w.ticker != nil {
+		w.ticker.Stop()
+		w.ticker = nil
+	}
+	close(w.close)
 	if w.device != nil {
 		w.device.Close()
 	}
@@ -193,6 +214,8 @@ func (w *WireGuard) InterfaceUpdated() {
 }
 
 func (w *WireGuard) onPauseUpdated(event int) {
+	w.upDownMutex.Lock()
+	defer w.upDownMutex.Unlock()
 	switch event {
 	case pause.EventDevicePaused:
 		w.device.Down()
@@ -201,7 +224,42 @@ func (w *WireGuard) onPauseUpdated(event int) {
 	}
 }
 
+// this exits iff outbound closed
+func (w *WireGuard) loopCheck() {
+	w.lastActive.Store(time.Now())
+	for {
+		select {
+		case <-w.close:
+			return
+		case <-w.ticker.C:
+		}
+		if time.Since(w.lastActive.Load()) > w.idleTimeout {
+			w.upDownMutex.Lock()
+			if !w.inactive {
+				w.inactive = true
+				w.device.Down()
+			}
+			w.upDownMutex.Unlock()
+		}
+		w.pauseManager.WaitActive()
+	}
+}
+
+func (w *WireGuard) touch() {
+	if w.ticker == nil {
+		return
+	}
+	w.lastActive.Store(time.Now())
+	w.upDownMutex.Lock()
+	if w.inactive && !w.pauseManager.IsPaused() {
+		w.inactive = false
+		w.device.Up()
+	}
+	w.upDownMutex.Unlock()
+}
+
 func (w *WireGuard) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	w.touch()
 	switch network {
 	case N.NetworkTCP:
 		w.logger.InfoContext(ctx, "outbound connection to ", destination)
@@ -219,6 +277,7 @@ func (w *WireGuard) DialContext(ctx context.Context, network string, destination
 }
 
 func (w *WireGuard) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	w.touch()
 	w.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 	if destination.IsFqdn() {
 		destinationAddresses, err := w.router.LookupDefault(ctx, destination.Fqdn)

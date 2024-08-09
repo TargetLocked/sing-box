@@ -1,5 +1,5 @@
 !!! quote "Changes in sing-box 1.8.0"
-    
+
     :material-plus: [gso](#gso)  
 
 ### Structure
@@ -36,6 +36,7 @@
   "workers": 4,
   "mtu": 1408,
   "network": "tcp",
+  "idle_timeout": "",
 
   ... // Dial Fields
 }
@@ -96,7 +97,7 @@ echo "private key" || wg pubkey
 
 #### peers
 
-Multi-peer support. 
+Multi-peer support.
 
 If enabled, `server, server_port, peer_public_key, pre_shared_key` will be ignored.
 
@@ -143,6 +144,12 @@ Enabled network
 One of `tcp` `udp`.
 
 Both is enabled by default.
+
+#### idle_timeout
+
+The idle timeout before the outbound is temporarily closed.
+
+Will not close for timeout if empty.
 
 ### Dial Fields
 
