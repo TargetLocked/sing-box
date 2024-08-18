@@ -450,10 +450,13 @@ func (g *URLTestGroup) onDialSuccess() {
 }
 
 func (g *URLTestGroup) onDialFailure(outboundTag string) {
+	if g.checking.Load() {
+		return
+	}
 	if g.maxSuccessiveFailures > 0 && g.failCount.Add(1) > int32(g.maxSuccessiveFailures) {
+		g.logger.Warn("enforced urltest because of multiple failures")
 		go g.CheckOutbounds(true)
 		g.failCount.Store(0)
-		g.logger.Warn("enforced urltest because of multiple failures")
 	} else {
 		g.history.DeleteURLTestHistory(outboundTag)
 	}
