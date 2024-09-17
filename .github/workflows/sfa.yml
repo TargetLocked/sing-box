@@ -19,41 +19,30 @@ jobs:
         with:
           path: sing-box-for-android
           repository: SagerNet/sing-box-for-android
-          ref: '3449863f922f86dc754e9443c94d605642f7c4f6'
+          ref: '3a2fc9c8802f0c40f0b1fd2d7acdcabb7aa0855f'
           submodules: recursive
 
       - name: setup go
         uses: actions/setup-go@v5
         with:
-          go-version: '~1.22'
-          cache-dependency-path: "**/go.sum"
+          go-version: '~1.24'
 
       - name: setup java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: 17
-          cache: 'gradle'
-          cache-dependency-path: |
-            sing-box-for-android/app/build.gradle
 
       - name: setup ndk
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r26c
+          ndk-version: r28
           link-to-sdk: true
 
       - name: get latest build tools version
         id: sdk-ver
         run: echo version=$(ls $ANDROID_HOME/build-tools | tail -n 1) >> $GITHUB_OUTPUT
-
-      - name: get sing-box version
-        id: sb-ver
-        run: |
-          cd sing-box
-          version=$(make internaltag)
-          echo version=$version >> $GITHUB_OUTPUT
 
       - name: build libbox and preparation
         env:
