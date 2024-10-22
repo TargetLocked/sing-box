@@ -18,8 +18,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: sing-box-for-android
-          repository: SagerNet/sing-box-for-android
-          ref: '45a1f5f0aa2b5cf7cb74720a2fa407fdaa591bbf'
+          repository: TargetLocked/sing-box-for-android
+          ref: '89dfd58d598a5a2dddbfe2d7c4de8b7fbb4307da'
           submodules: recursive
 
       - name: setup go
