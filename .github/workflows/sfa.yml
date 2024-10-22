@@ -19,7 +19,7 @@ jobs:
         with:
           path: sing-box-for-android
           repository: SagerNet/sing-box-for-android
-          ref: '3449863f922f86dc754e9443c94d605642f7c4f6'
+          ref: '45a1f5f0aa2b5cf7cb74720a2fa407fdaa591bbf'
           submodules: recursive
 
       - name: setup go
