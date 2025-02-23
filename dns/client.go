@@ -340,7 +340,7 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 	var response4 []netip.Addr
 	var response6 []netip.Addr
 	var group task.Group
-	group.Append("exchange4", func(ctx context.Context) error {
+	group.Append("exchange4", func(_ context.Context) error {
 		response, err := c.lookupToExchange(ctx, transport, dnsName, dns.TypeA, lookupOptions, responseChecker)
 		if err != nil {
 			return err
@@ -348,7 +348,7 @@ func (c *Client) Lookup(ctx context.Context, transport adapter.DNSTransport, dom
 		response4 = response
 		return nil
 	})
-	group.Append("exchange6", func(ctx context.Context) error {
+	group.Append("exchange6", func(_ context.Context) error {
 		response, err := c.lookupToExchange(ctx, transport, dnsName, dns.TypeAAAA, lookupOptions, responseChecker)
 		if err != nil {
 			return err
