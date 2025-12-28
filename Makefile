@@ -276,12 +276,12 @@ internaltag:
 
 diff:
 	git fetch upstream
-	git diff origin/dev-next..upstream/dev-next
+	git diff origin/main..upstream/main
 
 upgrade:
 	git fetch upstream
-	git branch -f dev-next upstream/dev-next
-	git rebase origin/dev-next dance-crate --onto upstream/dev-next
+	git branch -f main upstream/main
+	git rebase origin/main dance-crate --onto upstream/main
 
 upgrade-mod:
 	sed -Ei 's=(targetlocked/sing-dns).*$$=\1 $(shell make -sC ../sing-dns modver)=i' ./go.mod
@@ -289,6 +289,7 @@ upgrade-mod:
 
 push:
 	git push -f origin dev-next
+	git push -f origin main
 	git push -f origin dance-crate
 
 COMMIT_INFO = $(shell git log -1 --format="%H %ct")
