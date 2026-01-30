@@ -11,11 +11,12 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/sniff"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/dns"
 	R "github.com/sagernet/sing-box/route/rule"
-	"github.com/sagernet/sing-mux"
-	"github.com/sagernet/sing-tun"
+	mux "github.com/sagernet/sing-mux"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing-tun/ping"
-	"github.com/sagernet/sing-vmess"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -49,7 +50,7 @@ func (r *Router) RouteConnectionEx(ctx context.Context, conn net.Conn, metadata 
 	err := r.routeConnection(ctx, conn, metadata, onClose)
 	if err != nil {
 		N.CloseOnHandshakeFailure(conn, onClose, err)
-		if E.IsClosedOrCanceled(err) || R.IsRejected(err) {
+		if E.IsClosedOrCanceled(err) || R.IsRejected(err) || dns.IsNameError(err) {
 			r.logger.DebugContext(ctx, "connection closed: ", err)
 		} else {
 			r.logger.ErrorContext(ctx, err)
@@ -167,7 +168,7 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 	}))
 	if err != nil {
 		conn.Close()
-		if E.IsClosedOrCanceled(err) || R.IsRejected(err) {
+		if E.IsClosedOrCanceled(err) || R.IsRejected(err) || dns.IsNameError(err) {
 			r.logger.DebugContext(ctx, "connection closed: ", err)
 		} else {
 			r.logger.ErrorContext(ctx, err)
@@ -184,7 +185,7 @@ func (r *Router) RoutePacketConnectionEx(ctx context.Context, conn N.PacketConn,
 	err := r.routePacketConnection(ctx, conn, metadata, onClose)
 	if err != nil {
 		N.CloseOnHandshakeFailure(conn, onClose, err)
-		if E.IsClosedOrCanceled(err) || R.IsRejected(err) {
+		if E.IsClosedOrCanceled(err) || R.IsRejected(err) || dns.IsNameError(err) {
 			r.logger.DebugContext(ctx, "connection closed: ", err)
 		} else {
 			r.logger.ErrorContext(ctx, err)

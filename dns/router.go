@@ -13,7 +13,7 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	R "github.com/sagernet/sing-box/route/rule"
-	"github.com/sagernet/sing-tun"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -338,6 +338,8 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 				r.logger.DebugContext(ctx, "response rejected for ", domain, " (cached)")
 			} else if errors.Is(err, ErrResponseRejected) {
 				r.logger.DebugContext(ctx, "response rejected for ", domain)
+			} else if IsNameError(err) {
+				r.logger.DebugContext(ctx, "lookup got NXDOMAIN for ", domain)
 			} else {
 				r.logger.ErrorContext(ctx, E.Cause(err, "lookup failed for ", domain))
 			}

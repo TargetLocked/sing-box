@@ -1,6 +1,8 @@
 package dns
 
 import (
+	"errors"
+
 	mDNS "github.com/miekg/dns"
 )
 
@@ -15,4 +17,8 @@ type RcodeError int
 
 func (e RcodeError) Error() string {
 	return mDNS.RcodeToString[int(e)]
+}
+
+func IsNameError(err error) bool {
+	return errors.Is(err, RcodeNameError)
 }
