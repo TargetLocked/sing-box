@@ -1,0 +1,72 @@
+name: Build SFI
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: macos-26
+    env:
+      SEGMENT_DOWNLOAD_TIMEOUT_MINS: "2"
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          path: sing-box
+
+      - name: checkout app
+        uses: actions/checkout@v6
+        with:
+          path: sing-box-for-apple
+          repository: SagerNet/sing-box-for-apple
+          ref: "main"
+
+      - name: setup go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "~1.25"
+          cache-dependency-path: "**/go.sum"
+
+      - name: build libbox
+        # env:
+        # CGO_ENABLED: "0"
+        run: |
+          cd sing-box
+          make lib_install
+          go run ./cmd/internal/build_libbox -target apple -platform ios
+
+      - name: update version
+        run: |
+          cd sing-box
+          make update_apple_version
+
+      - name: build app
+        # GCC_OPTIMIZATION_LEVEL=s \
+        # SWIFT_OPTIMIZATION_LEVEL=-O
+        run: |
+          cd sing-box-for-apple
+          xcodebuild archive \
+            -scheme SFI \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -archivePath build/SFI.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY= \
+            CODE_SIGN_ENTITLEMENTS= \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: export ipa
+        run: |
+          cd sing-box-for-apple/build
+          mkdir -p Payload
+          mv SFI.xcarchive/Products/Applications/sing-box.app Payload/SFI.app
+          zip -r SFI.ipa ./Payload
+
+      - name: upload ipa
+        uses: actions/upload-artifact@v6
+        with:
+          name: SFI
+          path: sing-box-for-apple/build/SFI.ipa
