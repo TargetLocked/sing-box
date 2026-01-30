@@ -1273,6 +1273,8 @@ func (r *Router) Lookup(ctx context.Context, domain string, options adapter.DNSQ
 				r.logger.DebugContext(ctx, "lookup rejected for ", domain)
 			} else if errors.Is(err, ErrNotCached) {
 				r.logger.DebugContext(ctx, "cache-only lookup missed for ", domain)
+			} else if IsNameError(err) {
+				r.logger.DebugContext(ctx, "lookup got NXDOMAIN for ", domain)
 			} else {
 				r.logger.ErrorContext(ctx, E.Cause(err, "lookup failed for ", domain))
 			}
