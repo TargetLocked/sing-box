@@ -29,18 +29,18 @@ type _RuleSet struct {
 type RuleSet _RuleSet
 
 func (r RuleSet) MarshalJSON() ([]byte, error) {
-	if r.Type != C.RuleSetTypeInline {
-		var defaultFormat string
-		switch r.Type {
-		case C.RuleSetTypeLocal:
-			defaultFormat = ruleSetDefaultFormat(r.LocalOptions.Path)
-		case C.RuleSetTypeRemote:
-			defaultFormat = ruleSetDefaultFormat(r.RemoteOptions.URL)
-		}
-		if r.Format == defaultFormat {
-			r.Format = ""
-		}
-	}
+	// if r.Type != C.RuleSetTypeInline {
+	// 	var defaultFormat string
+	// 	switch r.Type {
+	// 	case C.RuleSetTypeLocal:
+	// 		defaultFormat = ruleSetDefaultFormat(r.LocalOptions.Path)
+	// 	case C.RuleSetTypeRemote:
+	// 		defaultFormat = ruleSetDefaultFormat(r.RemoteOptions.URL)
+	// 	}
+	// 	if r.Format == defaultFormat {
+	// 		r.Format = ""
+	// 	}
+	// }
 	var v any
 	switch r.Type {
 	case "", C.RuleSetTypeInline:
