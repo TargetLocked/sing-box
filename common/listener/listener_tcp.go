@@ -37,7 +37,7 @@ func (l *Listener) ListenTCP() (net.Listener, error) {
 	if l.listenOptions.ReuseAddr {
 		listenConfig.Control = control.Append(listenConfig.Control, control.ReuseAddr())
 	}
-	if l.listenOptions.DisableTCPKeepAlive {
+	if C.IsAndroid || C.IsIos || l.listenOptions.DisableTCPKeepAlive {
 		listenConfig.KeepAlive = -1
 		listenConfig.KeepAliveConfig.Enable = false
 	} else {
