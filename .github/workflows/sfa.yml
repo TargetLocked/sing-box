@@ -65,6 +65,11 @@ jobs:
           cd sing-box
           make update_android_version
 
+      - name: patch app
+        run: |
+          cd sing-box-for-android
+          sed -i 's|visible = group\.selectable|visible = true|' app/src/main/java/io/nekohasekai/sfa/compose/screen/dashboard/groups/GroupsScreen.kt
+
       - name: build app
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
