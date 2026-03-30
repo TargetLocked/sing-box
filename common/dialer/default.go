@@ -149,7 +149,7 @@ func NewDefault(ctx context.Context, options option.DialerOptions) (*DefaultDial
 	} else {
 		dialer.Timeout = C.TCPConnectTimeout
 	}
-	if options.DisableTCPKeepAlive {
+	if C.IsAndroid || C.IsIos || options.DisableTCPKeepAlive {
 		dialer.KeepAlive = -1
 		dialer.KeepAliveConfig.Enable = false
 	} else {
