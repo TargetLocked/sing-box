@@ -22,6 +22,11 @@ jobs:
           repository: SagerNet/sing-box-for-android
           ref: "main"
 
+      - name: checkout app submodules
+        run: |-
+          cd sing-box-for-android
+          git submodule update --init --recursive -v
+
       - name: setup go
         uses: actions/setup-go@v6
         with:
