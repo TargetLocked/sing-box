@@ -319,7 +319,8 @@ MODVER = v0.0.0-$(MODVER_TIME)-$(MODVER_HASH)
 modver:
 	@echo $(MODVER)
 
-SERVER_PARAMS = $(PARAMS) -o "./build/sing-box-$$GOOS-$$GOARCH" -tags "$(TAGS),with_v2ray_api"
+SERVER_PARAMS = $(PARAMS) -o "./build/sing-box-$$GOOS-$$GOARCH$$BUILDSUFFIX" -tags "$(TAGS),with_v2ray_api"
+SERVER_PARAMS_OBFS = $(PARAMS) -o "./build/sing-box-$$GOOS-$$GOARCH-obfs" -tags "with_gvisor,with_quic,with_dhcp,with_utls,with_acme,with_clash_api,with_ccm,with_ocm,badlinkname,tfogo_checklinkname0"
 
 server:
 	mkdir -p build/
@@ -327,3 +328,5 @@ server:
 	go build $(SERVER_PARAMS) $(MAIN)
 	export GOTOOLCHAIN=local GOOS=linux GOARCH=arm64 && \
 	go build $(SERVER_PARAMS) $(MAIN)
+	export GOTOOLCHAIN=local GOOS=linux GOARCH=amd64 && \
+	garble -literals build $(SERVER_PARAMS_OBFS) $(MAIN)
