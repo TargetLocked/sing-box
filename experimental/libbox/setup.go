@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/sagernet/sing-box/common/networkquality"
 	"github.com/sagernet/sing-box/common/stun"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/daemon"
 	"github.com/sagernet/sing-box/dns"
 	"github.com/sagernet/sing-box/experimental/locale"
 	"github.com/sagernet/sing-box/log"
@@ -203,5 +205,8 @@ func FormatFQDN(fqdn string) string {
 }
 
 func ProxyDisplayType(proxyType string) string {
+	if strings.HasSuffix(proxyType, daemon.PinnedGroupTypeSuffix) || strings.HasSuffix(proxyType, daemon.PinnedFallbackGroupTypeSuffix) {
+		return proxyType
+	}
 	return C.ProxyDisplayName(proxyType)
 }

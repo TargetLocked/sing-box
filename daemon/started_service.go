@@ -36,6 +36,14 @@ import (
 
 const APIVersion = 4
 
+// Pinned urltest groups report their display type with one of these suffixes in place of
+// the raw type, so clients without a display table show it as is. The fallback suffix is
+// used while the group has fallen back from an unavailable pinned outbound.
+const (
+	PinnedGroupTypeSuffix         = " 📌"
+	PinnedFallbackGroupTypeSuffix = " 📌⏳"
+)
+
 const (
 	urlTestPushMinInterval = 250 * time.Millisecond
 	notificationQueueSize  = 16
@@ -601,7 +609,19 @@ func (s *StartedService) readGroups() *Groups {
 		var g Group
 		g.Tag = iGroup.Tag()
 		g.Type = iGroup.Type()
-		_, g.Selectable = iGroup.(*group.Selector)
+		switch typedGroup := iGroup.(type) {
+		case *group.Selector:
+			g.Selectable = true
+		case *group.URLTest:
+			g.Selectable = true
+			if pinned := typedGroup.Pinned(); pinned != nil {
+				suffix := PinnedGroupTypeSuffix
+				if pinned != typedGroup.Selected(N.NetworkTCP) {
+					suffix = PinnedFallbackGroupTypeSuffix
+				}
+				g.Type = C.ProxyDisplayName(g.Type) + suffix
+			}
+		}
 		if selected := iGroup.Selected(N.NetworkTCP); selected != nil {
 			g.Selected = selected.Tag()
 		}
@@ -731,6 +751,7 @@ func (s *StartedService) URLTest(ctx context.Context, request *URLTestRequest) (
 	urlTest, isURLTest := outbound.(*group.URLTest)
 	outboundGroup, isOutboundGroup := outbound.(adapter.OutboundGroup)
 	if isURLTest {
+		urlTest.Unpin()
 		go urlTest.CheckOutbounds()
 	} else if isOutboundGroup {
 		outbounds := common.FilterNotNil(common.Map(outboundGroup.All(), func(it string) adapter.Outbound {
@@ -765,12 +786,17 @@ func (s *StartedService) SelectOutbound(ctx context.Context, request *SelectOutb
 	if !isLoaded {
 		return nil, status.Error(codes.NotFound, "selector not found: "+request.GroupTag)
 	}
-	selector, isSelector := outboundGroup.(*group.Selector)
-	if !isSelector {
-		return nil, status.Error(codes.InvalidArgument, "outbound is not a selector: "+request.GroupTag)
-	}
-	if !selector.SelectOutbound(request.OutboundTag) {
-		return nil, status.Error(codes.NotFound, "outbound not found in selector: "+request.OutboundTag)
+	switch typedGroup := outboundGroup.(type) {
+	case *group.Selector:
+		if !typedGroup.SelectOutbound(request.OutboundTag) {
+			return nil, status.Error(codes.NotFound, "outbound not found in selector: "+request.OutboundTag)
+		}
+	case *group.URLTest:
+		if err := typedGroup.Pin(ctx, request.OutboundTag); err != nil {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+	default:
+		return nil, status.Error(codes.InvalidArgument, "outbound is not a selector or urltest: "+request.GroupTag)
 	}
 	return &emptypb.Empty{}, nil
 }

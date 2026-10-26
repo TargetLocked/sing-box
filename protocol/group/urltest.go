@@ -107,6 +107,20 @@ func (s *URLTest) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 			return err
 		}
 		s.group = group
+		if s.Tag() != "" {
+			cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
+			if cacheFile != nil {
+				pinned := cacheFile.LoadSelected(s.Tag())
+				if pinned != "" {
+					index := slices.IndexFunc(outbounds, func(it adapter.Outbound) bool {
+						return it.Tag() == pinned
+					})
+					if index >= 0 {
+						group.pinned.Store(outbounds[index])
+					}
+				}
+			}
+		}
 	case adapter.StartStateStarted:
 		s.group.PostStart()
 		scope.Add(s.group.Close)
@@ -161,6 +175,62 @@ func (s *URLTest) CheckOutbounds() {
 
 func (s *URLTest) PerformUpdateCheck() {
 	s.group.performUpdateCheck()
+}
+
+// Pinned returns the manually pinned outbound, or nil if the group is not pinned.
+func (s *URLTest) Pinned() adapter.Outbound {
+	group := s.group
+	if group == nil {
+		return nil
+	}
+	return group.pinned.Load()
+}
+
+// Pin prefers the given outbound over the fastest one while it passes URL tests.
+// An outbound without recent test results is tested first, and is refused if unavailable.
+func (s *URLTest) Pin(ctx context.Context, tag string) error {
+	group := s.group
+	if group == nil {
+		return E.New("urltest group not started")
+	}
+	index := slices.IndexFunc(group.outbounds, func(it adapter.Outbound) bool {
+		return it.Tag() == tag
+	})
+	if index < 0 {
+		return E.New("outbound not found in group: ", tag)
+	}
+	detour := group.outbounds[index]
+	URLTestOutbounds(ctx, group.outbound, group.history, group.logger, []adapter.Outbound{detour}, group.link, group.interval, false)
+	if group.history.LoadURLTestHistory(RealTag(detour, N.NetworkTCP)) == nil {
+		return E.New("outbound unavailable: ", tag)
+	}
+	group.pinned.Store(detour)
+	s.storePinned(tag)
+	group.performUpdateCheck()
+	return nil
+}
+
+func (s *URLTest) Unpin() {
+	group := s.group
+	if group == nil || group.pinned.Swap(nil) == nil {
+		return
+	}
+	s.storePinned("")
+	group.performUpdateCheck()
+}
+
+func (s *URLTest) storePinned(tag string) {
+	if s.Tag() == "" {
+		return
+	}
+	cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
+	if cacheFile == nil {
+		return
+	}
+	err := cacheFile.StoreSelected(s.Tag(), tag)
+	if err != nil {
+		s.logger.Error("store pinned: ", err)
+	}
 }
 
 func (s *URLTest) OnDialSuccess() {
@@ -254,6 +324,7 @@ type URLTestGroup struct {
 	idleTimeout                  time.Duration
 	history                      *urltest.HistoryStorage
 	checking                     atomic.Bool
+	pinned                       common.TypedValue[adapter.Outbound]
 	selectedOutboundTCP          adapter.Outbound
 	selectedOutboundUDP          adapter.Outbound
 	interruptGroup               *interrupt.Group
@@ -354,6 +425,11 @@ func (g *URLTestGroup) Close() error {
 }
 
 func (g *URLTestGroup) Select(network string) (adapter.Outbound, bool) {
+	if pinned := g.pinned.Load(); pinned != nil && common.Contains(pinned.Network(), network) {
+		if g.history.LoadURLTestHistory(RealTag(pinned, network)) != nil {
+			return pinned, true
+		}
+	}
 	var minDelay uint16
 	var minOutbound adapter.Outbound
 	switch network {
