@@ -1,0 +1,134 @@
+name: Build dance-crate
+
+on:
+  workflow_dispatch:
+    inputs:
+      sfa:
+        description: "Build SFA"
+        type: boolean
+        default: true
+      sfw:
+        description: "Build SFW"
+        type: boolean
+        default: true
+      sfi:
+        description: "Build SFI (experimental)"
+        type: boolean
+        default: false
+      rebuild:
+        description: "Rebuild SFA/SFW even if this commit was already built (e.g. the app repo changed)"
+        type: boolean
+        default: false
+
+# artifact names uploaded by sfa.yml and sfw.yml
+env:
+  SFA_ARTIFACT: SFA-arm64-v8a
+  SFW_ARTIFACT: SFW-x64
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sfa_run: ${{ steps.reuse.outputs.sfa_run }}
+      sfw_run: ${{ steps.reuse.outputs.sfw_run }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: read version
+        id: version
+        run: echo "version=$(make -s internaltag)" >> "$GITHUB_OUTPUT"
+
+      # any unexpired artifact built from this commit, by a push run or an earlier dispatch
+      - name: find reusable builds
+        id: reuse
+        if: ${{ !inputs.rebuild }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find_run() {
+            gh api "repos/${{ github.repository }}/actions/artifacts?name=$1&per_page=100" \
+              -q "[.artifacts[] | select(.expired | not) | select(.workflow_run.head_sha == \"${{ github.sha }}\")][0].workflow_run.id // empty"
+          }
+          if [[ "${{ inputs.sfa }}" == true ]]; then
+            echo "sfa_run=$(find_run "$SFA_ARTIFACT")" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "${{ inputs.sfw }}" == true ]]; then
+            echo "sfw_run=$(find_run "$SFW_ARTIFACT")" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
+  sfa:
+    needs: prepare
+    if: inputs.sfa && needs.prepare.outputs.sfa_run == ''
+    uses: ./.github/workflows/sfa.yml
+    secrets: inherit
+
+  sfw:
+    needs: prepare
+    if: inputs.sfw && needs.prepare.outputs.sfw_run == ''
+    uses: ./.github/workflows/sfw.yml
+    secrets: inherit
+
+  sfi:
+    if: inputs.sfi
+    uses: ./.github/workflows/sfi.yml
+    secrets: inherit
+
+  release:
+    needs: [prepare, sfa, sfw, sfi]
+    # unchecked or reused platforms are skipped, which would otherwise skip this job too
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: download reused SFA
+        if: needs.prepare.outputs.sfa_run != ''
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.SFA_ARTIFACT }}
+          run-id: ${{ needs.prepare.outputs.sfa_run }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: download reused SFW
+        if: needs.prepare.outputs.sfw_run != ''
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ env.SFW_ARTIFACT }}
+          run-id: ${{ needs.prepare.outputs.sfw_run }}
+          github-token: ${{ github.token }}
+          path: dist
+
+      # the tag drops "+dance-crate"; it is created when the draft is published
+      - name: draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SFA_RUN: ${{ needs.prepare.outputs.sfa_run }}
+          SFW_RUN: ${{ needs.prepare.outputs.sfw_run }}
+        run: |
+          notes="Built from ${{ github.sha }}."
+          for reused in "SFA:$SFA_RUN" "SFW:$SFW_RUN"; do
+            if [[ -n ${reused#*:} ]]; then
+              notes+=$'\n'"${reused%%:*} reused from run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${reused#*:}."
+            fi
+          done
+          gh release create "v${VERSION%%+*}" dist/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "$VERSION" \
+            --notes "$notes" \
+            --draft

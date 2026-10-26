@@ -1,0 +1,124 @@
+name: Build SFW
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  # branches only, so the tag created by publishing a release doesn't trigger a build
+  push:
+    branches: ["**"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      SEGMENT_DOWNLOAD_TIMEOUT_MINS: "2"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          path: sing-box
+
+      - name: checkout app
+        uses: actions/checkout@v6
+        with:
+          path: sing-box-for-desktop
+          repository: SagerNet/sing-box-for-desktop
+          ref: "main"
+
+      - name: checkout app submodules
+        run: |-
+          cd sing-box-for-desktop
+          git submodule update --init --recursive -v
+
+      - name: setup go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "~1.26"
+          cache-dependency-path: "**/go.sum"
+
+      # the toolchain is pinned by the app's rust-toolchain.toml
+      - name: setup rust
+        run: |-
+          cd sing-box-for-desktop
+          rustup toolchain install
+
+      - name: cache windows sharing module
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            sing-box-for-desktop/bin/windows-share-toolchain/cargo-target
+          key: windows-share-x64-${{ hashFiles('sing-box-for-desktop/native/windows-share/Cargo.lock') }}
+          restore-keys: windows-share-x64-
+
+      # TODO: remove this step once sing-box-for-desktop (and its dashboard submodule) pin a pnpm
+      # release other than 11.13.0. That release's @pnpm/exe build ships without a binary, and
+      # pnpm/action-setup@v6 bootstraps by self-updating to the pinned version, which pnpm refuses
+      # (ERR_PNPM_BROKEN_PNPM_RELEASE). The step fails once the pin changes, so it gets removed
+      # instead of lingering as a no-op.
+      - name: patch pnpm pin
+        shell: bash
+        run: |
+          for file in sing-box-for-desktop/package.json sing-box-for-desktop/dashboard/package.json; do
+            grep -q '"packageManager": "pnpm@11.13.0"' "$file" || { echo "::error file=$file::pnpm pin is no longer 11.13.0, remove the patch pnpm pin step"; exit 1; }
+            sed -i 's/"packageManager": "pnpm@11.13.0"/"packageManager": "pnpm@11.13.1"/' "$file"
+          done
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: sing-box-for-desktop/package.json
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: sing-box-for-desktop/package.json
+          cache: pnpm
+          cache-dependency-path: |
+            sing-box-for-desktop/pnpm-lock.yaml
+            sing-box-for-desktop/dashboard/pnpm-lock.yaml
+
+      # build_shared.ReadTag runs `make internaltag`, which needs make and a POSIX shell;
+      # steps that reach it run under bash so make picks up Git's sh
+      - name: setup make
+        shell: bash
+        run: command -v make || choco install make --no-progress -y
+
+      - name: update version
+        shell: bash
+        run: |
+          cd sing-box
+          version=$(make -s internaltag)
+          echo "version: $version"
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+.*-[0-9a-f]+\+dance-crate$ ]] || { echo "unexpected version"; exit 1; }
+          make update_desktop_version
+
+      - name: setup signing
+        env:
+          WINDOWS_CERTIFICATES_P12: ${{ secrets.WINDOWS_CERTIFICATES_P12 }}
+          WINDOWS_P12_PASSWORD: ${{ secrets.WINDOWS_P12_PASSWORD }}
+        run: |-
+          $certificatePath = Join-Path $env:RUNNER_TEMP "windows-signing.p12"
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATES_P12))
+          @{
+            windows = @{
+              certificateFile = $certificatePath
+              certificatePassword = $env:WINDOWS_P12_PASSWORD
+            }
+          } | ConvertTo-Json -Depth 3 | Set-Content -Encoding utf8NoBOM sing-box-for-desktop/signing.local.json
+
+      - name: build app
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm -C sing-box-for-desktop install
+          pnpm -C sing-box-for-desktop package:win -- x64
+
+      - name: upload exe
+        uses: actions/upload-artifact@v6
+        with:
+          name: SFW-x64
+          path: sing-box-for-desktop/release/SFW-*.exe
+          if-no-files-found: error

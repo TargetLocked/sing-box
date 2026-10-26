@@ -2,7 +2,10 @@ name: Build SFA
 
 on:
   workflow_dispatch:
+  workflow_call:
+  # branches only, so the tag created by publishing a release doesn't trigger a build
   push:
+    branches: ["**"]
 
 jobs:
   build:
