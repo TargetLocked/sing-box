@@ -30,6 +30,7 @@ func proxyRouter(server *Server, router adapter.Router) http.Handler {
 		r.Get("/", getProxy(server))
 		r.Get("/delay", getProxyDelay(server))
 		r.Put("/", updateProxy)
+		r.Delete("/", unpinProxy)
 	})
 	return r
 }
@@ -83,6 +84,13 @@ func proxyInfo(server *Server, detour adapter.Outbound) *badjson.JSONObject {
 		}
 		info.Put("now", now)
 		info.Put("all", group.All())
+	}
+	if urlTest, isURLTest := detour.(*group.URLTest); isURLTest {
+		var fixed string
+		if pinned := urlTest.Pinned(); pinned != nil {
+			fixed = pinned.Tag()
+		}
+		info.Put("fixed", fixed)
 	}
 	return &info
 }
@@ -172,19 +180,37 @@ func updateProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy := r.Context().Value(CtxKeyProxy).(adapter.Outbound)
-	selector, ok := proxy.(*group.Selector)
+	switch outboundGroup := proxy.(type) {
+	case *group.Selector:
+		if !outboundGroup.SelectOutbound(req.Name) {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, newError("Selector update error: not found"))
+			return
+		}
+	case *group.URLTest:
+		if err := outboundGroup.Pin(r.Context(), req.Name); err != nil {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, newError(err.Error()))
+			return
+		}
+	default:
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, newError("Must be a Selector or URLTest"))
+		return
+	}
+
+	render.NoContent(w, r)
+}
+
+func unpinProxy(w http.ResponseWriter, r *http.Request) {
+	proxy := r.Context().Value(CtxKeyProxy).(adapter.Outbound)
+	urlTest, ok := proxy.(*group.URLTest)
 	if !ok {
 		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, newError("Must be a Selector"))
+		render.JSON(w, r, ErrBadRequest)
 		return
 	}
-
-	if !selector.SelectOutbound(req.Name) {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, newError("Selector update error: not found"))
-		return
-	}
-
+	urlTest.Unpin()
 	render.NoContent(w, r)
 }
 
