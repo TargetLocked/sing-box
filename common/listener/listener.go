@@ -107,6 +107,23 @@ func (l *Listener) Start() error {
 		} else {
 			listenAddrString = listenAddr.String()
 		}
+		// Platform hosts (boxdd) run as a service and apply the proxy to the owner session instead.
+		platformInterface := service.FromContext[adapter.PlatformInterface](l.ctx)
+		if (runtime.GOOS == "windows" || runtime.GOOS == "linux") && platformInterface != nil {
+			err := platformInterface.ProcessPlatformOptions(option.TunPlatformOptions{
+				HTTPProxy: &option.HTTPProxyOptions{
+					Enabled: true,
+					ServerOptions: option.ServerOptions{
+						Server:     listenAddrString,
+						ServerPort: listenPort,
+					},
+				},
+			})
+			if err != nil {
+				return E.Errors(E.Cause(err, "set system proxy"), l.Close())
+			}
+			return nil
+		}
 		systemProxy, err := settings.NewSystemProxy(l.ctx, M.ParseSocksaddrHostPort(listenAddrString, listenPort), l.systemProxySOCKS, nil)
 		if err != nil {
 			return E.Errors(E.Cause(err, "initialize system proxy"), l.Close())
